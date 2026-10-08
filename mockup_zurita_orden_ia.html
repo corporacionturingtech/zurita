@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Orden en línea Zurita</title>
+<!--
+  Prototipo interactivo para la primera reunión con Zurita & Zurita Laboratorios (lunes 5 de octubre de 2026).
+  Muestra UNA de las tres oportunidades del correo de prospección (clinicaZuritaZurita/Prospeccion.txt):
+  "Orden médica con IA": foto de la orden, exámenes identificados, cotización, preparación y pago en línea.
+  Es un MOCKUP: no hay backend. La lectura por IA, el pago, el recordatorio y el envío al sistema del
+  laboratorio están simulados. Precios, tiempos de entrega e indicaciones de preparación son ilustrativos.
+  No acepta fotos reales ni pide datos personales o de tarjeta: ningún dato de pacientes entra al prototipo.
+  Archivo autocontenido: sin CDN ni fuentes externas; funciona sin internet.
+  Paleta de la marca Zurita (zuritalaboratorios.com): turquesa #01A09B e índigo #283480.
+  El estado se guarda en localStorage de este navegador; "Reiniciar" lo borra.
+-->
+<style>
+  /* Una sola columna para el paciente (pensada para celular) y, en pantallas anchas, un panel lateral con lo que ve el laboratorio. */
+  :root {
+    color-scheme: light;
+    --z-indigo: #283480;
+    --z-indigo-dark: #1B2460;
+    --z-indigo-tint: #EEF0F9;
+    --z-teal: #01A09B;
+    --z-teal-dark: #017B77;
+    --z-teal-tint: #E3F5F4;
+    --bg: #F4F6FB;
+    --surface: #FFFFFF;
+    --text: #1F2747;
+    --muted: #5C6585;
+    --border: #DCE1EE;
+    --warn: #A2540A;
+    --warn-tint: #FEF3D6;
+    --warn-border: #F2D48A;
+    --ok: #177A45;
+    --paper: #FFFDF6;
+    --ink: #1D3A8A;
+    --wa: #DCF8C6;
+
+    --font: Montserrat, "Segoe UI", "Noto Sans", Arial, "Liberation Sans", sans-serif;
+    --font-hand: "Segoe Script", "Bradley Hand", "Brush Script MT", "Comic Sans MS", cursive;
+    --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+
+    --radius: 16px;
+    --shadow: 0 1px 2px rgba(40, 52, 128, .06), 0 12px 32px rgba(40, 52, 128, .10);
+    --ease: cubic-bezier(.2, .8, .2, 1);
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.5; }
+  h1, h2, h3, p, ul, ol { margin: 0; }
+  ul, ol { padding: 0; list-style: none; }
+  button, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  :focus-visible { outline: 3px solid var(--z-teal); outline-offset: 2px; }
+  .ic { width: 20px; height: 20px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* ---------- Barra superior ---------- */
+  .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; display: flex; align-items: center; gap: 12px; padding: 10px max(16px, calc((100vw - 1080px) / 2)); background: var(--surface); border-bottom: 1px solid var(--border); }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .brand img { width: 40px; height: 40px; border-radius: 9px; display: block; }
+  .brand-t { min-width: 0; line-height: 1.2; }
+  .brand-t b { display: block; font-size: 15px; font-weight: 800; color: var(--z-indigo); white-space: nowrap; }
+  .brand-t span { display: block; font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+  .proto { margin-left: auto; padding: 4px 10px; border-radius: 999px; border: 1.5px solid var(--warn-border); background: var(--warn-tint); color: var(--warn); font-size: 10.5px; font-weight: 800; letter-spacing: .08em; white-space: nowrap; }
+  .reset { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font-size: 13px; font-weight: 700; color: var(--z-indigo); }
+  .reset:hover { background: var(--z-indigo-tint); }
+
+  /* ---------- Layout ---------- */
+  .wrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; max-width: 1080px; margin: 0 auto; padding-block: 20px 28px; padding-inline: 16px; }
+  .flow { min-width: 0; border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow); overflow: hidden; }
+  .lab { display: none; min-width: 0; }
+  .pad { padding: 22px 20px 24px; }
+
+  /* ---------- Pasos ---------- */
+  .steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; padding: 16px 20px 14px; border-bottom: 1px solid var(--border); background: linear-gradient(180deg, var(--z-indigo-tint), var(--surface)); }
+  .st { min-width: 0; }
+  .st i { display: block; height: 5px; border-radius: 3px; background: var(--border); transition: background .3s; }
+  .st span { display: block; margin-top: 7px; font-size: 11.5px; font-weight: 700; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st.done i { background: var(--z-teal); }
+  .st span em { font-style: normal; }
+  .st.now i { background: var(--z-indigo); }
+  .st.now span { color: var(--z-indigo); }
+  .st.done span { color: var(--z-teal-dark); }
+
+  .kicker { font-size: 11.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--z-teal-dark); }
+  h1 { margin-top: 4px; font-size: 24px; line-height: 1.2; font-weight: 800; color: var(--z-indigo); text-wrap: balance; }
+  .lead { margin-top: 8px; color: var(--muted); max-width: 60ch; }
+  .note { display: flex; gap: 10px; margin-top: 18px; padding: 12px 14px; border-radius: 12px; background: var(--z-indigo-tint); color: var(--text); font-size: 13px; line-height: 1.45; }
+  .note .ic { margin-top: 1px; color: var(--z-indigo); }
+  .fine { margin-top: 10px; font-size: 12px; color: var(--muted); }
+
+  /* ---------- Botones ---------- */
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 22px; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--z-indigo); color: #fff; font-size: 15.5px; font-weight: 800; transition: background .2s, transform .1s; }
+  .btn:hover { background: var(--z-indigo-dark); }
+  .btn:active { transform: translateY(1px); }
+  .btn.grow { flex: 1 1 220px; }
+  .btn[disabled] { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn.ghost { min-height: 50px; padding: 0 16px; background: transparent; color: var(--z-indigo); border: 1px solid var(--border); font-weight: 700; }
+  .btn.ghost:hover { background: var(--z-indigo-tint); }
+
+  /* ---------- Órdenes de ejemplo ---------- */
+  .orders { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 18px; }
+  .order { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 14px; width: 100%; padding: 12px; border-radius: 14px; border: 1.5px solid var(--border); background: var(--surface); text-align: left; transition: border-color .2s, box-shadow .2s, transform .2s; }
+  .order:hover { border-color: var(--z-teal); box-shadow: var(--shadow); transform: translateY(-1px); }
+  .order b { display: block; font-size: 16px; color: var(--z-indigo); }
+  .order span { display: block; font-size: 12.5px; color: var(--muted); }
+  .order .go { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; background: var(--z-teal-tint); color: var(--z-teal-dark); }
+  .thumb { height: 104px; padding: 9px 9px 0; border-radius: 6px; border: 1px solid #E6DFC8; background: var(--paper); overflow: hidden; transform: rotate(-1.5deg); box-shadow: 0 2px 6px rgba(0, 0, 0, .10); }
+  .thumb u { display: block; height: 4px; margin-bottom: 6px; border-radius: 2px; background: var(--z-indigo); opacity: .55; text-decoration: none; width: 70%; }
+  .thumb em { display: block; font-family: var(--font-hand); font-style: normal; font-size: 9.5px; line-height: 1.5; color: var(--ink); white-space: nowrap; }
+
+  /* ---------- Lectura de la orden ---------- */
+  .paper { position: relative; margin-top: 18px; padding: 18px 18px 16px; border-radius: 10px; border: 1px solid #E6DFC8; background: var(--paper); box-shadow: 0 2px 10px rgba(0, 0, 0, .08); overflow: hidden; }
+  .paper-h { padding-bottom: 10px; border-bottom: 2px solid var(--z-indigo); }
+  .paper-h b { display: block; font-size: 15px; color: var(--z-indigo); }
+  .paper-h span { font-size: 11.5px; color: var(--muted); }
+  .paper-rp { margin-top: 12px; font-size: 12px; font-weight: 700; color: var(--muted); }
+  .paper-l { margin-top: 4px; }
+  .paper-l li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-height: 40px; padding: 3px 8px; border-radius: 8px; transition: background .3s; }
+  .hw { font-family: var(--font-hand); font-size: 19px; color: var(--ink); min-width: 118px; }
+  .paper-l li:nth-child(odd) .hw { transform: rotate(-1.2deg); }
+  .paper-l li:nth-child(even) .hw { transform: rotate(.8deg) translateX(4px); }
+  .rec { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--z-teal); color: #fff; font-size: 12.5px; font-weight: 700; opacity: 0; transform: translateX(-8px); transition: opacity .3s, transform .3s var(--ease); }
+  .rec .ic { width: 14px; height: 14px; stroke-width: 3; }
+  .rec.doubt { background: var(--warn-tint); color: var(--warn); border: 1px solid var(--warn-border); }
+  .paper-l li.hit { background: var(--z-teal-tint); }
+  .paper-l li.hit.q { background: var(--warn-tint); }
+  .paper-l li.hit .rec { opacity: 1; transform: none; }
+  .paper-sign { margin-top: 10px; text-align: right; font-family: var(--font-hand); font-size: 15px; color: var(--ink); opacity: .7; }
+  .beam { position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--z-teal); box-shadow: 0 0 18px 4px rgba(1, 160, 155, .55); opacity: 0; }
+  .paper.scanning .beam { opacity: 1; animation: beam 1.5s linear infinite; }
+  @keyframes beam { from { top: 0; } to { top: 100%; } }
+  .status { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-weight: 700; color: var(--z-indigo); }
+  .spin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid var(--z-teal-tint); border-top-color: var(--z-teal); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .status .ic { color: var(--ok); }
+
+  /* ---------- Exámenes ---------- */
+  .doubt-card { margin-top: 18px; padding: 14px; border-radius: 14px; border: 1.5px solid var(--warn-border); background: var(--warn-tint); }
+  .doubt-card h3 { display: flex; align-items: center; gap: 8px; font-size: 15px; color: var(--warn); }
+  .doubt-card p { margin-top: 6px; font-size: 13.5px; }
+  .doubt-card .hw { display: inline; min-width: 0; font-size: 17px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .chip { min-height: 42px; padding: 0 14px; border-radius: 999px; border: 1.5px solid var(--border); background: var(--surface); font-size: 13.5px; font-weight: 700; color: var(--z-indigo); transition: border-color .2s, background .2s; }
+  .chip:hover { border-color: var(--z-teal); }
+  .chip.on { border-color: var(--z-indigo); background: var(--z-indigo); color: #fff; }
+  .doubt-ok { display: flex; align-items: center; gap: 8px; margin-top: 18px; padding: 10px 14px; border-radius: 12px; background: var(--z-teal-tint); color: var(--z-teal-dark); font-size: 13.5px; font-weight: 700; }
+  .doubt-ok button { margin-left: auto; padding: 4px 8px; border: 0; background: none; font-size: 12.5px; font-weight: 700; color: var(--z-indigo); text-decoration: underline; }
+
+  .exams { margin-top: 16px; border-top: 1px solid var(--border); }
+  .exam { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .exam b { display: block; font-size: 15px; }
+  .exam span { display: block; font-size: 12.5px; color: var(--muted); }
+  .exam .price { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--z-indigo); }
+  .exam .rm { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); }
+  .exam .rm:hover { color: var(--z-indigo); border-color: var(--z-indigo); }
+  .exam.off b, .exam.off .price { text-decoration: line-through; color: var(--muted); }
+  .exam .tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--warn-tint); color: var(--warn); font-size: 11px; font-weight: 700; vertical-align: 1px; }
+  .total { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-top: 14px; font-size: 15px; font-weight: 700; }
+  .total b { font-size: 24px; font-weight: 800; color: var(--z-indigo); font-variant-numeric: tabular-nums; }
+  .sum-row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ---------- Preparación y lugar ---------- */
+  h2 { margin-top: 22px; font-size: 16px; font-weight: 800; color: var(--z-indigo); }
+  .prep { display: grid; gap: 8px; margin-top: 10px; }
+  .prep li { display: flex; gap: 12px; padding: 12px 14px; border-radius: 12px; background: var(--z-teal-tint); }
+  .prep .ic { margin-top: 2px; color: var(--z-teal-dark); }
+  .prep b { display: block; font-size: 14.5px; }
+  .prep span { display: block; font-size: 13px; color: var(--muted); }
+  .seg { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  .seg button { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 6px 10px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); font-size: 14.5px; font-weight: 700; color: var(--z-indigo); }
+  .seg button.on { border-color: var(--z-indigo); background: var(--z-indigo-tint); box-shadow: inset 0 0 0 1px var(--z-indigo); }
+  .field { margin-top: 14px; }
+  .field label, .field .lbl { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+  .field select { width: 100%; min-height: 48px; padding: 0 12px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); font-size: 15px; font-weight: 600; }
+  .field .chips { margin-top: 0; }
+  .hint { display: flex; gap: 10px; margin-top: 14px; padding: 12px 14px; border-radius: 12px; border: 1px dashed var(--z-teal); color: var(--z-teal-dark); font-size: 13.5px; font-weight: 600; }
+
+  /* ---------- Pago y confirmación ---------- */
+  .summary { margin-top: 16px; padding: 14px 16px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg); }
+  .summary .sum-row b { color: var(--text); font-weight: 700; text-align: right; }
+  .done-h { display: flex; align-items: center; gap: 14px; }
+  .done-h .ok { display: grid; place-items: center; width: 52px; height: 52px; flex: 0 0 auto; border-radius: 50%; background: var(--z-teal); color: #fff; animation: pop .5s var(--ease); }
+  .done-h .ok .ic { width: 28px; height: 28px; stroke-width: 3; }
+  @keyframes pop { from { transform: scale(.4); opacity: 0; } }
+  .ticket { margin-top: 18px; border-radius: 14px; border: 1.5px dashed var(--z-indigo); overflow: hidden; }
+  .ticket-code { padding: 14px 16px; background: var(--z-indigo); color: #fff; }
+  .ticket-code span { display: block; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+  .ticket-code b { font-family: var(--font-mono); font-size: 26px; letter-spacing: .06em; }
+  .ticket-b { padding: 12px 16px; }
+  .wa { margin-top: 18px; }
+  .wa .lbl { font-size: 12px; font-weight: 700; color: var(--muted); }
+  .bubble { margin-top: 6px; padding: 10px 12px; border-radius: 4px 14px 14px 14px; background: var(--wa); color: #1B2B1B; font-size: 13.5px; line-height: 1.45; max-width: 46ch; }
+  .bubble b { font-weight: 700; }
+
+  /* ---------- Lo que ve el laboratorio ---------- */
+  .lab-card { border-radius: var(--radius); background: var(--z-indigo); color: #E4E7F6; padding: 20px; }
+  .lab-card .kicker { color: #7FE3DF; }
+  .lab-card h3 { margin-top: 4px; font-size: 19px; font-weight: 800; color: #fff; }
+  .lab-card > p { margin-top: 6px; font-size: 13px; opacity: .85; }
+  .tl { margin-top: 16px; display: grid; gap: 0; }
+  .tl li { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; padding-bottom: 16px; }
+  .tl li::before { content: ""; position: absolute; left: 10px; top: 22px; bottom: 0; width: 2px; background: rgba(255, 255, 255, .18); }
+  .tl li:last-child { padding-bottom: 0; }
+  .tl li:last-child::before { display: none; }
+  .tl .dot { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .35); }
+  .tl .dot .ic { width: 12px; height: 12px; stroke-width: 3.5; opacity: 0; }
+  .tl b { display: block; font-size: 14px; color: rgba(255, 255, 255, .55); }
+  .tl span { display: block; font-size: 12.5px; color: rgba(255, 255, 255, .45); }
+  .tl li.on .dot { border-color: var(--z-teal); background: var(--z-teal); color: #fff; }
+  .tl li.on .dot .ic { opacity: 1; }
+  .tl li.on b { color: #fff; }
+  .tl li.on span { color: #C9CFEC; }
+  .tl li.on.new { animation: slide .5s var(--ease); }
+  @keyframes slide { from { opacity: 0; transform: translateX(10px); } }
+
+  .adm { margin-top: 16px; padding: 14px; border-radius: 12px; background: #fff; color: var(--text); }
+  .adm-h { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .adm-h b { font-family: var(--font-mono); font-size: 15px; color: var(--z-indigo); }
+  .pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+  .pill.ok { background: #DDF3E6; color: var(--ok); }
+  .pill.warn { background: var(--warn-tint); color: var(--warn); }
+  .adm .sum-row { font-size: 13px; }
+  .adm .sum-row b { color: var(--text); font-weight: 700; text-align: right; }
+
+  .wins { margin-top: 22px; padding: 18px; border-radius: 14px; background: var(--z-teal-tint); }
+  .wins .kicker { color: var(--z-teal-dark); }
+  .wins ul { display: grid; gap: 10px; margin-top: 10px; }
+  .wins li { display: flex; gap: 10px; font-size: 14px; }
+  .wins li .ic { margin-top: 1px; color: var(--z-teal-dark); stroke-width: 3; }
+  .only-narrow { margin-top: 22px; }
+
+  .foot { max-width: 1080px; margin: 0 auto; padding: 0 16px 28px; font-size: 12px; line-height: 1.5; color: var(--muted); }
+  .foot b { color: var(--z-indigo); letter-spacing: .06em; }
+
+  /* ---------- Modal ---------- */
+  .overlay { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; padding: 16px; background: rgba(27, 36, 96, .6); }
+  .overlay.on { display: grid; }
+  .modal { width: min(520px, 100%); max-height: calc(100% - 32px); overflow-y: auto; padding: 24px 22px 20px; border-radius: 18px; background: var(--surface); box-shadow: 0 30px 80px rgba(0, 0, 0, .35); border-top: 6px solid var(--z-teal); }
+  .modal h3 { font-size: 21px; font-weight: 800; color: var(--z-indigo); text-wrap: balance; }
+  .modal p { margin-top: 10px; font-size: 14.5px; }
+  .modal ol { display: grid; gap: 8px; margin-top: 14px; counter-reset: s; }
+  .modal ol li { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; counter-increment: s; }
+  .modal ol li::before { content: counter(s); display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border-radius: 50%; background: var(--z-indigo-tint); color: var(--z-indigo); font-size: 13px; font-weight: 800; }
+
+  @media (min-width: 560px) {
+    .pad { padding: 28px 30px 30px; }
+    .steps { padding-inline: 30px; }
+    .orders { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .order { grid-template-columns: minmax(0, 1fr); justify-items: start; gap: 10px; padding: 16px; }
+    .order .thumb { width: 100%; height: 132px; }
+    .order .thumb em { font-size: 11px; }
+    .order .go { display: none; }
+    h1 { font-size: 27px; }
+  }
+  @media (min-width: 980px) {
+    .wrap { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; gap: 24px; padding-block: 28px; }
+    .lab { display: block; position: sticky; top: 84px; }
+    .only-narrow { display: none; }
+  }
+  @media (max-width: 420px) {
+    .brand-t span { display: none; }
+    .proto .long { display: none; }
+    .reset span { display: none; }
+    .reset { padding: 0 10px; }
+    .st span { font-size: 11px; }
+    .st span em { display: none; }
+  }
+  @media (max-width: 760px) { .proto .mid { display: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+  <symbol id="i-reset" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9M4 4v4.5h4.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></symbol>
+  <symbol id="i-id" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="11" r="2"/><path d="M6 16c.6-1.5 5.4-1.5 6 0M15 10h3M15 14h3"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.2 7-11.5a7 7 0 0 0-14 0C5 14.8 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></symbol>
+</svg>
+
+<header class="top">
+  <div class="brand">
+    <img src="data:image/png;base64,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" alt="Zurita &amp; Zurita Laboratorios">
+    <div class="brand-t"><b>Orden en línea</b><span>Zurita &amp; Zurita Laboratorios</span></div>
+  </div>
+  <span class="proto">PROTOTIPO<span class="mid"> · TURINGTECH</span><span class="long"> · DATOS ILUSTRATIVOS</span></span>
+  <button class="reset" id="resetBtn" type="button" title="Empezar de nuevo"><svg class="ic"><use href="#i-reset"/></svg><span>Reiniciar</span></button>
+</header>
+
+<main class="wrap">
+  <section class="flow" id="flow" aria-live="polite"></section>
+  <aside class="lab" id="lab" aria-label="Lo que ve el laboratorio"></aside>
+</main>
+
+<footer class="foot">
+  Prototipo elaborado por <b>TURINGTECH</b> para Zurita &amp; Zurita Laboratorios. No es un sistema del laboratorio.
+  Pacientes, médicos, precios, tiempos de entrega e indicaciones de preparación son ilustrativos y se validan con el laboratorio.
+  La lectura por IA, el pago, el recordatorio y el envío al sistema del laboratorio están simulados.
+</footer>
+
+<div class="overlay" id="overlay"><div class="modal" id="modal" role="dialog" aria-modal="true"></div></div>
+
+<script>
+/* =====================================================================
+   DATOS ILUSTRATIVOS. Todo lo que el prototipo muestra sale de este bloque.
+   Para adaptar el prototipo con insumos reales de Zurita, se edita solo aquí.
+   ===================================================================== */
+const DATA = {
+  paciente: { nombre: 'María Fernanda Paz', corto: 'María Fernanda' },
+  // p = precio en USD (ilustrativo) · e = entrega de resultados (ilustrativa) · prep = claves de DATA.prep
+  examenes: {
+    BH:   { n: 'Biometría hemática', p: 8.00, e: 'Mismo día', prep: [] },
+    GLU:  { n: 'Glucosa en ayunas', p: 4.50, e: 'Mismo día', prep: ['ayuno8'] },
+    LIP:  { n: 'Perfil lipídico', d: 'Colesterol total, HDL, LDL y triglicéridos', p: 16.00, e: 'Mismo día', prep: ['ayuno12'] },
+    CREA: { n: 'Creatinina', p: 5.00, e: 'Mismo día', prep: [] },
+    EMO:  { n: 'Examen de orina (EMO)', d: 'Elemental y microscópico', p: 5.50, e: 'Mismo día', prep: ['orina'] },
+    TSH:  { n: 'TSH', d: 'Hormona estimulante de la tiroides', p: 12.00, e: '24 horas', prep: ['tiroides'] },
+    T4L:  { n: 'T4 libre', p: 12.00, e: '24 horas', prep: ['tiroides'] },
+    T4T:  { n: 'T4 total', p: 11.00, e: '24 horas', prep: ['tiroides'] },
+    T3L:  { n: 'T3 libre', p: 13.00, e: '24 horas', prep: ['tiroides'] },
+    T3T:  { n: 'T3 total', p: 11.00, e: '24 horas', prep: ['tiroides'] },
+    ATPO: { n: 'Anticuerpos anti-TPO', p: 22.00, e: '48 horas', prep: [] },
+    GRH:  { n: 'Grupo sanguíneo y factor Rh', p: 7.00, e: 'Mismo día', prep: [] },
+    VDRL: { n: 'VDRL', p: 6.00, e: 'Mismo día', prep: [] },
+    VIH:  { n: 'VIH (4.ª generación)', p: 14.00, e: '24 horas', prep: [] },
+    URO:  { n: 'Urocultivo', p: 15.00, e: '72 horas', prep: ['orina'] }
+  },
+  prep: {
+    ayuno8:   { ic: 'i-clock', t: 'Ayuno de 8 horas', d: 'Puede tomar agua.', h: 8 },
+    ayuno12:  { ic: 'i-clock', t: 'Ayuno de 12 horas', d: 'Puede tomar agua. Evite alcohol el día anterior.', h: 12 },
+    orina:    { ic: 'i-drop', t: 'Primera orina de la mañana', d: 'Recójala en un frasco estéril y entréguela el mismo día.' },
+    tiroides: { ic: 'i-info', t: 'Medicación para la tiroides', d: 'Si la toma, avise al personal antes de la muestra.' }
+  },
+  // raw = lo que escribió el médico · ex = examen reconocido · duda = lectura dudosa entre dos exámenes
+  ordenes: [
+    { id: 'chequeo', codigo: 'ZZ-0481', titulo: 'Chequeo general', medico: 'Dra. Elena Ruiz M.', esp: 'Medicina interna',
+      lineas: [{ raw: 'BH', ex: 'BH' }, { raw: 'Glu. ayunas', ex: 'GLU' }, { raw: 'Perfil lipídico', ex: 'LIP' }, { raw: 'Crea', ex: 'CREA' }, { raw: 'EMO', ex: 'EMO' }, { raw: 'TSH', ex: 'TSH' }, { raw: 'T4 ...', duda: ['T4L', 'T4T'] }] },
+    { id: 'prenatal', codigo: 'ZZ-0482', titulo: 'Control prenatal', medico: 'Dr. Andrés Molina V.', esp: 'Ginecología y obstetricia',
+      lineas: [{ raw: 'BH', ex: 'BH' }, { raw: 'Grupo y factor', ex: 'GRH' }, { raw: 'Glucosa', ex: 'GLU' }, { raw: 'VDRL', ex: 'VDRL' }, { raw: 'VIH', ex: 'VIH' }, { raw: 'EMO', ex: 'EMO' }, { raw: 'Urocultivo', ex: 'URO' }] },
+    { id: 'tiroides', codigo: 'ZZ-0483', titulo: 'Perfil tiroideo', medico: 'Dra. Paula Cevallos R.', esp: 'Endocrinología',
+      lineas: [{ raw: 'TSH', ex: 'TSH' }, { raw: 'T4 libre', ex: 'T4L' }, { raw: 'Anti TPO', ex: 'ATPO' }, { raw: 'T3 ...', duda: ['T3L', 'T3T'] }] }
+  ],
+  // Zonas publicadas en zuritalaboratorios.com/sucursales
+  sedes: ['Quito Norte', 'Quito Centro', 'Quito Sur', 'Quito Valles', 'Ibarra', 'Otavalo', 'Manta', 'Portoviejo', 'Santo Domingo'],
+  horasSede: ['07:00', '07:30', '08:00', '08:30', '09:00'],
+  horasDom: ['06:30', '07:30', '08:30'],
+  recargoDom: 5.00,
+  pagos: [{ id: 'tarjeta', n: 'Tarjeta' }, { id: 'transfer', n: 'Transferencia' }, { id: 'sede', n: 'Pagar en la toma' }],
+  pasos: ['Su orden', 'Exámenes', 'Preparación', 'Pago']
+};
+/* ===================================================================== */
+
+const KEY = 'zurita-orden-ia-prototipo-v1';
+const $ = (s) => document.querySelector(s);
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = (v) => '$' + v.toFixed(2);
+const icon = (id) => '<svg class="ic" aria-hidden="true"><use href="#' + id + '"/></svg>';
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ---------- Estado ---------- */
+function initState() {
+  return { step: 1, order: null, duda: null, removed: [], modo: 'sede', sede: DATA.sedes[0], hora: null, pago: 'tarjeta', seenIntro: false };
+}
+let S = initState();
+let scanning = false, scanGen = 0, paying = false, lastLab = 0;
+function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (raw) S = Object.assign(initState(), JSON.parse(raw));
+  } catch (e) {}
+  if (!ordenActual() && S.step > 1) S = Object.assign(initState(), { seenIntro: S.seenIntro });
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} }
+
+/* ---------- Cálculos ---------- */
+function ordenActual() { return DATA.ordenes.find((o) => o.id === S.order) || null; }
+function lineaDuda(o) { return o.lineas.find((l) => l.duda) || null; }
+// Exámenes de la orden: los reconocidos más la línea dudosa según lo que eligió el paciente.
+function examenes(o) {
+  const out = [];
+  o.lineas.forEach((l) => {
+    if (l.ex) out.push({ k: l.ex, porConfirmar: false });
+    else if (S.duda) out.push({ k: S.duda === 'lab' ? l.duda[0] : S.duda, porConfirmar: S.duda === 'lab' });
+  });
+  return out;
+}
+function activos(o) { return examenes(o).filter((x) => !S.removed.includes(x.k)); }
+function subtotal(o) { return activos(o).reduce((s, x) => s + DATA.examenes[x.k].p, 0); }
+function total(o) { return subtotal(o) + (S.modo === 'dom' ? DATA.recargoDom : 0); }
+function preps(o) {
+  const keys = [];
+  activos(o).forEach((x) => DATA.examenes[x.k].prep.forEach((p) => { if (!keys.includes(p)) keys.push(p); }));
+  // Si hay dos ayunos, se muestra solo el más largo.
+  const ayunos = keys.filter((k) => DATA.prep[k].h).sort((a, b) => DATA.prep[b].h - DATA.prep[a].h);
+  return keys.filter((k) => !DATA.prep[k].h || k === ayunos[0]);
+}
+function ayunoHoras(o) { return preps(o).reduce((m, k) => Math.max(m, DATA.prep[k].h || 0), 0); }
+function horaMenos(hhmm, h) {
+  const parts = hhmm.split(':').map(Number);
+  const m = ((parts[0] * 60 + parts[1] - h * 60) % 1440 + 1440) % 1440;
+  return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+// La cita es el siguiente día hábil (lunes a sábado).
+function fechaCita() {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+  const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  const meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return dias[d.getDay()] + ' ' + d.getDate() + ' de ' + meses[d.getMonth()];
+}
+function lugar() { return S.modo === 'dom' ? 'Toma a domicilio' : 'Sucursal ' + S.sede; }
+
+/* ---------- Render: pasos ---------- */
+function stepsHTML() {
+  return '<div class="steps">' + DATA.pasos.map((p, i) => {
+    const n = i + 1;
+    const cls = S.step > n ? 'done' : (S.step === n ? 'now' : '');
+    return '<div class="st ' + cls + '"><i></i><span><em>' + n + '. </em>' + esc(p) + '</span></div>';
+  }).join('') + '</div>';
+}
+function paperHTML(o, live) {
+  return '<div class="paper' + (live ? ' scanning' : '') + '" id="paper">' +
+    '<div class="paper-h"><b>' + esc(o.medico) + '</b><span>' + esc(o.esp) + ' · Orden de ejemplo, médico ficticio</span></div>' +
+    '<div class="paper-rp">Paciente: ' + esc(DATA.paciente.nombre) + ' · Solicito:</div>' +
+    '<ul class="paper-l">' + o.lineas.map((l) => {
+      const rec = l.ex
+        ? '<span class="rec">' + icon('i-check') + esc(DATA.examenes[l.ex].n) + '</span>'
+        : '<span class="rec doubt">Lectura dudosa</span>';
+      return '<li class="' + (l.duda ? 'q' : '') + (live ? '' : ' hit') + '"><span class="hw">' + esc(l.raw) + '</span>' + rec + '</li>';
+    }).join('') + '</ul>' +
+    '<div class="paper-sign">' + esc(o.medico.replace(/^Dra?\. /, '')) + '</div>' +
+    '<div class="beam"></div></div>';
+}
+
+/* ---------- Render: pantallas ---------- */
+const SCREENS = {
+  1() {
+    const o = ordenActual();
+    if (o && (scanning || S.scanned)) {
+      const n = o.lineas.filter((l) => l.ex).length;
+      const d = lineaDuda(o);
+      return '<div class="kicker">Paso 1 de 4</div><h1>' + (scanning ? 'Leyendo su orden' : 'Orden leída') + '</h1>' +
+        '<p class="lead">El sistema reconoce la letra y las abreviaturas del médico y las convierte en exámenes del catálogo.</p>' +
+        paperHTML(o, scanning) +
+        (scanning
+          ? '<div class="status"><span class="spin"></span><span id="scanMsg">Leyendo la orden…</span></div>'
+          : '<div class="status">' + icon('i-check') + '<span>' + n + ' exámenes reconocidos' + (d ? ' y 1 línea por confirmar' : '') + '</span></div>' +
+            '<div class="actions"><button class="btn grow" data-act="go" data-step="2">Revisar mis exámenes' + icon('i-arrow') + '</button><button class="btn ghost" data-act="otra">Otra orden</button></div>');
+    }
+    return '<div class="kicker">Paso 1 de 4</div><h1>Suba la foto de su orden médica</h1>' +
+      '<p class="lead">Elija una de estas tres órdenes de ejemplo para ver cómo se lee.</p>' +
+      '<div class="orders">' + DATA.ordenes.map((o) =>
+        '<button class="order" type="button" data-act="pick" data-id="' + o.id + '">' +
+        '<div class="thumb" aria-hidden="true"><u></u>' + o.lineas.slice(0, 5).map((l) => '<em>' + esc(l.raw) + '</em>').join('') + '</div>' +
+        '<div><b>' + esc(o.titulo) + '</b><span>' + esc(o.esp) + ' · ' + o.lineas.length + ' líneas</span></div>' +
+        '<div class="go">' + icon('i-arrow') + '</div></button>').join('') + '</div>' +
+      '<div class="note">' + icon('i-cam') + '<span>En el sistema real, el paciente toma la foto con su celular o sube el PDF. Aquí solo hay órdenes de ejemplo, para que ningún dato real de pacientes entre al prototipo.</span></div>';
+  },
+  2() {
+    const o = ordenActual();
+    const d = lineaDuda(o);
+    let duda = '';
+    if (d && !S.duda) {
+      duda = '<div class="doubt-card"><h3>' + icon('i-alert') + 'Una línea no se lee con seguridad</h3>' +
+        '<p>El médico escribió <span class="hw">' + esc(d.raw) + '</span> ¿A cuál examen se refiere?</p>' +
+        '<div class="chips">' + d.duda.map((k) => '<button class="chip" data-act="duda" data-k="' + k + '">' + esc(DATA.examenes[k].n) + '</button>').join('') +
+        '<button class="chip" data-act="duda" data-k="lab">No estoy seguro</button></div></div>';
+    } else if (d) {
+      duda = '<div class="doubt-ok">' + icon('i-check') + '<span>' + (S.duda === 'lab' ? 'El laboratorio confirmará esa línea con la orden original.' : 'Línea confirmada: ' + esc(DATA.examenes[S.duda].n) + '.') + '</span><button data-act="duda" data-k="">Cambiar</button></div>';
+    }
+    const list = examenes(o).map((x) => {
+      const e = DATA.examenes[x.k];
+      const off = S.removed.includes(x.k);
+      return '<li class="exam' + (off ? ' off' : '') + '"><div><b>' + esc(e.n) + (x.porConfirmar ? '<span class="tag">Por confirmar</span>' : '') + '</b><span>' + (e.d ? esc(e.d) + ' · ' : '') + 'Resultado: ' + esc(e.e.toLowerCase()) + '</span></div>' +
+        '<div class="price">' + money(e.p) + '</div>' +
+        '<button class="rm" data-act="toggle" data-k="' + x.k + '" title="' + (off ? 'Volver a incluir' : 'Quitar de la orden') + '" aria-label="' + (off ? 'Volver a incluir ' : 'Quitar ') + esc(e.n) + '">' + icon(off ? 'i-undo' : 'i-x') + '</button></li>';
+    }).join('');
+    const n = activos(o).length;
+    const pendiente = d && !S.duda;
+    return '<div class="kicker">Paso 2 de 4</div><h1>Estos son sus exámenes</h1>' +
+      '<p class="lead">Su cotización está lista. Puede quitar un examen si no desea hacérselo ahora.</p>' +
+      duda +
+      '<ul class="exams">' + list + '</ul>' +
+      '<div class="total"><span>Total, ' + n + (n === 1 ? ' examen' : ' exámenes') + '</span><b>' + money(subtotal(o)) + '</b></div>' +
+      '<p class="fine">Precios y tiempos de entrega ilustrativos.</p>' +
+      '<div class="actions"><button class="btn ghost" data-act="go" data-step="1" aria-label="Atrás">' + icon('i-back') + '</button>' +
+      '<button class="btn grow" data-act="go" data-step="3"' + (pendiente || !n ? ' disabled' : '') + '>' + (pendiente ? 'Confirme la línea dudosa' : (n ? 'Continuar' + icon('i-arrow') : 'Incluya al menos un examen')) + '</button></div>';
+  },
+  3() {
+    const o = ordenActual();
+    const ps = preps(o);
+    const horas = S.modo === 'dom' ? DATA.horasDom : DATA.horasSede;
+    const ay = ayunoHoras(o);
+    const prep = '<ul class="prep">' + ps.map((k) => { const p = DATA.prep[k]; return '<li>' + icon(p.ic) + '<div><b>' + esc(p.t) + '</b><span>' + esc(p.d) + '</span></div></li>'; }).join('') +
+      '<li>' + icon('i-id') + '<div><b>Cédula y orden original</b><span>Tráigalas el día de la toma.</span></div></li></ul>';
+    return '<div class="kicker">Paso 3 de 4</div><h1>Cómo prepararse y dónde atenderse</h1>' +
+      '<h2>Su preparación</h2>' + prep +
+      '<p class="fine">Indicaciones ilustrativas, armadas según los exámenes de su orden.</p>' +
+      '<h2>¿Dónde prefiere la toma de muestra?</h2>' +
+      '<div class="seg"><button type="button" class="' + (S.modo === 'sede' ? 'on' : '') + '" data-act="modo" data-m="sede">' + icon('i-pin') + 'En sucursal</button>' +
+      '<button type="button" class="' + (S.modo === 'dom' ? 'on' : '') + '" data-act="modo" data-m="dom">' + icon('i-home') + 'A domicilio</button></div>' +
+      (S.modo === 'sede'
+        ? '<div class="field"><label for="sedeSel">Sucursal</label><select id="sedeSel">' + DATA.sedes.map((s) => '<option' + (s === S.sede ? ' selected' : '') + '>' + esc(s) + '</option>').join('') + '</select></div>'
+        : '<p class="fine">Un profesional va a la dirección registrada del paciente. Recargo ilustrativo: ' + money(DATA.recargoDom) + '.</p>') +
+      '<div class="field"><span class="lbl">Horario, ' + esc(fechaCita()) + '</span><div class="chips">' +
+      horas.map((h) => '<button class="chip' + (S.hora === h ? ' on' : '') + '" data-act="hora" data-h="' + h + '">' + h + '</button>').join('') + '</div></div>' +
+      (S.hora && ay ? '<div class="hint">' + icon('i-clock') + '<span>Para su cita de las ' + S.hora + ', su última comida debe ser antes de las ' + horaMenos(S.hora, ay) + ' de la noche anterior.</span></div>' : '') +
+      '<div class="actions"><button class="btn ghost" data-act="go" data-step="2" aria-label="Atrás">' + icon('i-back') + '</button>' +
+      '<button class="btn grow" data-act="go" data-step="4"' + (S.hora ? '' : ' disabled') + '>' + (S.hora ? 'Continuar' + icon('i-arrow') : 'Elija un horario') + '</button></div>';
+  },
+  4() {
+    const o = ordenActual();
+    const n = activos(o).length;
+    const alLlegar = S.pago === 'sede';
+    return '<div class="kicker">Paso 4 de 4</div><h1>Confirme y pague</h1>' +
+      '<div class="summary">' +
+      '<div class="sum-row"><span>Exámenes</span><b>' + n + ' · ' + money(subtotal(o)) + '</b></div>' +
+      (S.modo === 'dom' ? '<div class="sum-row"><span>Toma a domicilio</span><b>' + money(DATA.recargoDom) + '</b></div>' : '') +
+      '<div class="sum-row"><span>Lugar</span><b>' + esc(lugar()) + '</b></div>' +
+      '<div class="sum-row"><span>Fecha y hora</span><b>' + esc(fechaCita()) + ', ' + S.hora + '</b></div>' +
+      '<div class="total"><span>Total</span><b>' + money(total(o)) + '</b></div></div>' +
+      '<h2>Forma de pago</h2>' +
+      '<div class="chips">' + DATA.pagos.map((p) => '<button class="chip' + (S.pago === p.id ? ' on' : '') + '" data-act="pago" data-p="' + p.id + '">' + esc(p.n) + '</button>').join('') + '</div>' +
+      '<div class="note">' + icon('i-lock') + '<span>Pago simulado: el prototipo no pide ni guarda datos de tarjeta. En el sistema real se conecta la pasarela de pago que el laboratorio elija.</span></div>' +
+      '<div class="actions"><button class="btn ghost" data-act="go" data-step="3" aria-label="Atrás"' + (paying ? ' disabled' : '') + '>' + icon('i-back') + '</button>' +
+      '<button class="btn grow" data-act="pagar"' + (paying ? ' disabled' : '') + '>' + (paying ? 'Procesando…' : (alLlegar ? 'Confirmar mi cita' : 'Pagar ' + money(total(o)) + ' (simulado)')) + '</button></div>';
+  },
+  5() {
+    const o = ordenActual();
+    const ps = preps(o).filter((k) => k !== 'tiroides').map((k) => DATA.prep[k].t.toLowerCase());
+    const recordar = ps.length ? ' Recuerde: ' + ps.join(' y ') + '.' : '';
+    return '<div class="done-h"><div class="ok">' + icon('i-check') + '</div><div><div class="kicker">Listo</div><h1>Su cita está confirmada</h1></div></div>' +
+      '<div class="ticket"><div class="ticket-code"><span>Código de atención</span><b>' + o.codigo + '</b></div>' +
+      '<div class="ticket-b">' +
+      '<div class="sum-row"><span>Lugar</span><b>' + esc(lugar()) + '</b></div>' +
+      '<div class="sum-row"><span>Fecha y hora</span><b>' + esc(fechaCita()) + ', ' + S.hora + '</b></div>' +
+      '<div class="sum-row"><span>' + (S.pago === 'sede' ? 'Por pagar en la toma' : 'Pagado') + '</span><b>' + money(total(o)) + '</b></div></div></div>' +
+      '<div class="wa"><span class="lbl">Recordatorio por WhatsApp (simulado)</span>' +
+      '<div class="bubble"><b>Zurita &amp; Zurita Laboratorios</b><br>Hola ' + esc(DATA.paciente.corto) + ', le esperamos el ' + esc(fechaCita()) + ' a las ' + S.hora + (S.modo === 'dom' ? ' en su domicilio' : ' en la sucursal ' + esc(S.sede)) + '.' + esc(recordar) + ' Su código de atención es ' + o.codigo + '.</div></div>' +
+      '<div class="only-narrow">' + labHTML() + '</div>' +
+      '<div class="wins"><div class="kicker">Qué gana Zurita &amp; Zurita</div><ul>' +
+      '<li>' + icon('i-check') + '<span><b>Cotización sin llamada ni chat.</b> El paciente la obtiene solo, a cualquier hora.</span></li>' +
+      '<li>' + icon('i-check') + '<span><b>Sin digitar en ventanilla.</b> La orden llega prerregistrada a admisión.</span></li>' +
+      '<li>' + icon('i-check') + '<span><b>Pacientes que llegan preparados.</b> Cada uno recibe las indicaciones de sus propios exámenes.</span></li>' +
+      '<li>' + icon('i-check') + '<span><b>Pago antes de la toma.</b> Menos fila y menos manejo de caja.</span></li>' +
+      '<li>' + icon('i-check') + '<span><b>La persona decide.</b> Lo que la IA no lee con seguridad se marca para revisión, nunca se adivina.</span></li></ul></div>' +
+      '<div class="actions"><button class="btn grow" data-act="reset">Probar con otra orden' + icon('i-arrow') + '</button></div>';
+  }
+};
+
+/* ---------- Render: lo que ve el laboratorio ---------- */
+function labEvents() {
+  const o = ordenActual();
+  const leida = !!o && !scanning && (S.scanned || S.step > 1);
+  const d = o ? lineaDuda(o) : null;
+  const n = o ? o.lineas.filter((l) => l.ex).length : 0;
+  return [
+    { on: leida, t: 'Orden leída por IA', s: leida ? n + ' exámenes identificados' + (d ? ', 1 línea marcada para revisión' : '') : 'Reconoce letra y abreviaturas del médico' },
+    { on: leida && S.step >= 2, t: 'Cotización entregada', s: leida && S.step >= 2 ? money(subtotal(o)) + ', sin llamada ni chat' : 'El paciente la ve al instante' },
+    { on: leida && S.step >= 4, t: 'Cita reservada', s: leida && S.step >= 4 ? lugar() + ', ' + S.hora : 'Sucursal o domicilio, con su horario' },
+    { on: leida && S.step >= 4, t: 'Preparación enviada', s: leida && S.step >= 4 ? 'Según los exámenes de esta orden' : 'Indicaciones propias de cada orden' },
+    { on: leida && S.step >= 5, t: S.pago === 'sede' && S.step >= 5 ? 'Pago pendiente, en la toma' : 'Pago recibido', s: leida && S.step >= 5 ? money(total(o)) + ' (simulado)' : 'Antes de la toma de muestra' },
+    { on: leida && S.step >= 5, t: 'Orden prerregistrada en admisión', s: leida && S.step >= 5 ? 'Enviada al sistema del laboratorio (simulado)' : 'Sin digitar en ventanilla' }
+  ];
+}
+function labHTML() {
+  const ev = labEvents();
+  const count = ev.filter((e) => e.on).length;
+  const o = ordenActual();
+  let adm = '';
+  if (o && S.step >= 5) {
+    const porConf = S.duda === 'lab';
+    adm = '<div class="adm"><div class="adm-h"><b>' + o.codigo + '</b>' +
+      '<span class="pill ok">' + (S.pago === 'sede' ? 'Cita confirmada' : 'Pagado') + '</span>' + (porConf ? '<span class="pill warn">1 línea por confirmar</span>' : '') + '</div>' +
+      '<div class="sum-row"><span>Paciente</span><b>' + esc(DATA.paciente.nombre) + '</b></div>' +
+      '<div class="sum-row"><span>Médico</span><b>' + esc(o.medico) + '</b></div>' +
+      '<div class="sum-row"><span>Exámenes</span><b>' + activos(o).map((x) => esc(DATA.examenes[x.k].n)).join(', ') + '</b></div>' +
+      '<div class="sum-row"><span>Atención</span><b>' + esc(lugar()) + ', ' + S.hora + '</b></div></div>';
+  }
+  const html = '<div class="lab-card"><div class="kicker">Mientras tanto</div><h3>Lo que ve el laboratorio</h3>' +
+    '<p>Se completa solo, sin que nadie del equipo intervenga.</p>' +
+    '<ol class="tl">' + ev.map((e, i) => '<li class="' + (e.on ? 'on' : '') + (e.on && i >= lastLab ? ' new' : '') + '"><div class="dot">' + icon('i-check') + '</div><div><b>' + esc(e.t) + '</b><span>' + esc(e.s) + '</span></div></li>').join('') + '</ol>' + adm + '</div>';
+  lastLab = count;
+  return html;
+}
+
+function render() {
+  $('#flow').innerHTML = stepsHTML() + '<div class="pad">' + SCREENS[S.step]() + '</div>';
+  $('#lab').innerHTML = labHTML();
+}
+function goStep(n) {
+  S.step = n; save(); render();
+  const top = $('#flow').getBoundingClientRect().top + scrollY - 76;
+  if (scrollY > top) scrollTo({ top: Math.max(0, top), behavior: reduced ? 'auto' : 'smooth' });
+}
+
+/* ---------- Lectura simulada de la orden ---------- */
+function startScan(id) {
+  S = Object.assign(initState(), { seenIntro: true, order: id });
+  lastLab = 0;
+  const gen = ++scanGen;
+  const o = ordenActual();
+  if (reduced) { S.scanned = true; save(); render(); return; }
+  scanning = true;
+  render();
+  const items = Array.from(document.querySelectorAll('#paper .paper-l li'));
+  let i = 0;
+  (function next() {
+    if (gen !== scanGen) return;
+    if (i < items.length) {
+      const l = o.lineas[i];
+      items[i].classList.add('hit');
+      const msg = $('#scanMsg');
+      if (msg) msg.textContent = l.ex ? '«' + l.raw + '» es ' + DATA.examenes[l.ex].n : '«' + l.raw + '» no se lee con seguridad';
+      i++;
+      setTimeout(next, 520);
+    } else {
+      scanning = false; S.scanned = true; save(); render();
+    }
+  })();
+}
+
+/* ---------- Modal ---------- */
+function showIntro() {
+  $('#modal').innerHTML = '<h3>Usted es un paciente con una orden médica en papel</h3>' +
+    '<p>Este prototipo muestra cómo pasaría de la foto de su orden a una cita pagada, sin llamar ni escribir a nadie.</p>' +
+    '<ol><li>Suba su orden</li><li>Revise sus exámenes y su cotización</li><li>Vea cómo prepararse y elija dónde atenderse</li><li>Pague y reciba su código</li></ol>' +
+    '<p class="fine">Prototipo elaborado por Turingtech. Datos ilustrativos; la lectura por IA y el pago están simulados.</p>' +
+    '<div class="actions"><button class="btn grow" data-act="closeIntro">Empezar' + icon('i-arrow') + '</button></div>';
+  $('#overlay').classList.add('on');
+  const b = $('#modal .btn'); if (b) b.focus();
+}
+function closeModal() { $('#overlay').classList.remove('on'); S.seenIntro = true; save(); }
+
+/* ---------- Eventos ---------- */
+function reset() {
+  scanGen++; scanning = false; paying = false; lastLab = 0;
+  S = Object.assign(initState(), { seenIntro: true });
+  save(); render(); scrollTo({ top: 0, behavior: reduced ? 'auto' : 'smooth' });
+}
+const ACT = {
+  pick(el) { startScan(el.dataset.id); },
+  otra() { reset(); },
+  reset() { reset(); },
+  go(el) { goStep(Number(el.dataset.step)); },
+  duda(el) { S.duda = el.dataset.k || null; S.removed = []; save(); render(); },
+  toggle(el) { const k = el.dataset.k; S.removed = S.removed.includes(k) ? S.removed.filter((x) => x !== k) : S.removed.concat(k); save(); render(); },
+  modo(el) { S.modo = el.dataset.m; S.hora = null; save(); render(); },
+  hora(el) { S.hora = el.dataset.h; save(); render(); },
+  pago(el) { S.pago = el.dataset.p; save(); render(); },
+  pagar() {
+    if (paying) return;
+    paying = true; render();
+    setTimeout(() => { paying = false; goStep(5); }, reduced ? 0 : 1100);
+  },
+  closeIntro() { closeModal(); }
+};
+document.addEventListener('click', (e) => {
+  const el = e.target.closest('[data-act]');
+  if (!el || el.disabled) return;
+  const fn = ACT[el.dataset.act];
+  if (fn) fn(el);
+});
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'sedeSel') { S.sede = e.target.value; save(); $('#lab').innerHTML = labHTML(); }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('#overlay').classList.contains('on')) closeModal(); });
+$('#overlay').addEventListener('click', (e) => { if (e.target.id === 'overlay') closeModal(); });
+$('#resetBtn').addEventListener('click', reset);
+
+load();
+render();
+if (!S.seenIntro) showIntro();
+</script>
+</body>
+</html>
